@@ -3,29 +3,30 @@ Require Import Coq.Init.Nat.
 (* ==================== program ==================== *)
 
 Inductive statement : Type :=
-  | s_skip
-  | s_cons (i : instruction) (s : statement)
+  | s_skip                                   (* skip *)
+  | s_cons (i : instruction) (s : statement) (* i s *)
 
 with instruction : Type :=
-  | i_skip
-  | i_assign (d : nat) (e : expression)
-  | i_while (d : nat) (s : statement)
-  | i_async (s : statement)
-  | i_finish (s : statement)
-  | i_call (f : nat)
+  | i_skip                              (* skip *)
+  | i_assign (d : nat) (e : expression) (* a[d] = e *)
+  | i_while (d : nat) (s : statement)   (* while (a[d] /= 0) s *)
+  | i_async (s : statement)             (* async s *)
+  | i_finish (s : statement)            (* finish s *)
+  | i_call (f : nat)                    (* f() *)
 
 with expression : Type :=
-  | e_const (c : nat)
-  | e_add (d : nat).
+  | e_const (c : nat) (* c *)
+  | e_add (d : nat).  (* a[d] + 1 *)
 
 Definition program := list statement.
 
 Fixpoint concat (s1 : statement) (s2 : statement) : statement :=
   match s1 with
-  | s_skip => s_cons i_skip s2
-  | s_cons i s => s_cons i (concat s s2)
+  | s_skip => s_cons i_skip s2               (* skip . s2 = skip s2 *)
+  | s_cons i s1' => s_cons i (concat s1' s2) (* (i s1) . s2 = i (s1 . s2) *)
   end.
 
+(*
 Fixpoint well_formed_statement (s : statement) (n : nat) : Prop :=
   match s with
   | s_skip => True
@@ -44,11 +45,12 @@ Fixpoint well_formed_program (p : program) (n : nat) : Prop :=
   | nil => True
   | cons s tl => well_formed_statement s n /\ well_formed_program tl n
   end.
+*)
 
 Fixpoint get_function_body (p : program) (n : nat) : statement :=
   match p with
   | nil => s_skip
-  | cons s tl => if n =? 0 then s else get_function_body tl (n - 1)
+  | cons s ss => if n =? 0 then s else get_function_body ss (n - 1)
   end.
 
 (* ==================== array ==================== *)
@@ -60,26 +62,21 @@ Definition empty_array : array := (fun _ => 0).
 Definition update_array (a : array) (key : nat) (value : nat) : array :=
   fun k' => if k' =? key then value else a k'.
 
-Notation "x '!->' v" := (update_array empty_array x v)
-  (at level 100, v at next level, right associativity).
-
-Notation "x '!->' v ';' a" := (update_array a x v)
-  (at level 100, v at next level, right associativity).
-
 Definition eval_expression (a : array) (e : expression) : nat :=
   match e with
-  | e_const c => c
-  | e_add d => (a d) + 1
+  | e_const c => c       (* c *)
+  | e_add d => (a d) + 1 (* a[d] + 1 *)
   end.
 
 (* ==================== tree ==================== *)
 
 Inductive tree : Type :=
-  | t_ord (t1 : tree) (t2 : tree)
-  | t_unord (t1 : tree) (t2 : tree)
-  | t_stmt (s : statement)
-  | t_finished.
+  | t_ord (t1 : tree) (t2 : tree)   (* T |> T *)
+  | t_unord (t1 : tree) (t2 : tree) (* T || T *)
+  | t_stmt (s : statement)          (* <s> *)
+  | t_finished.                     (* check mark *)
 
+(*
 Fixpoint well_formed_tree (t : tree) (n : nat) : Prop :=
   match t with
   | t_ord t1 t2 => well_formed_tree t1 n /\ well_formed_tree t2 n
@@ -87,12 +84,14 @@ Fixpoint well_formed_tree (t : tree) (n : nat) : Prop :=
   | t_stmt s => well_formed_statement s n
   | t_finished => True
   end.
+*)
+(* tree_is_derived_from_program *)
 
 (* ==================== steps-to ==================== *)
 
 Inductive steps_to : program -> array -> tree -> program -> array -> tree -> Prop :=
-  | one p a t :
-    steps_to p a (t_ord t_finished t) p a t
+  | one p a t2 :
+    steps_to p a (t_ord t_finished t2) p a t2
   | two p a t1 a' t1' t2 :
     steps_to p a t1 p a' t1' ->
     steps_to p a (t_ord t1 t2) p a' (t_ord t1' t2)
@@ -126,31 +125,46 @@ Inductive steps_to : program -> array -> tree -> program -> array -> tree -> Pro
     steps_to p a (t_stmt (s_cons (i_call f) k)) p a (t_stmt (concat (get_function_body p f) k)).
 
 Theorem progress : forall (p : program) (a : array) (t : tree),
+(*
   well_formed_program p (length p) ->
   well_formed_tree t (length p) ->
+*)
   t = t_finished \/ exists a' t', steps_to p a t p a' t'.
 Proof.
-  intros p a t H1 H2.
+  intros p a t.
   induction t; simpl.
-  - destruct IHt1.
-    + simpl in H2. apply H2.
-    + right. exists a. exists t2. subst. apply one.
-    + right. inversion H. inversion H0. exists x. exists (t_ord x0 t2). constructor. assumption.
-  - destruct IHt1.
-    + simpl in H2. apply H2.
-    + right. exists a. exists t2. subst. constructor.
-    + right. inversion H. inversion H0. exists x. exists (t_unord x0 t2). constructor. assumption.
-  - destruct s.
-    + right. exists a. exists t_finished. constructor.
-    + destruct i; right.
+  - right; destruct IHt1; subst.
+    + exists a. exists t2. constructor.
+    + inversion H. inversion H0.
+      exists x. exists (t_ord x0 t2). constructor. assumption.
+  - right; destruct IHt1; subst.
+    + exists a. exists t2. constructor.
+    + inversion H. inversion H0.
+      exists x. exists (t_unord x0 t2). constructor. assumption.
+  - right; destruct s.
+    + exists a. exists t_finished. constructor.
+    + destruct i.
       * exists a. exists (t_stmt s). constructor.
-      * exists (update_array a d (eval_expression a e)). exists (t_stmt s). constructor.
-      * exists a. assert (a d = 0 \/ a d <> 0). { destruct (a d). { left. reflexivity. } { right. discriminate. } }
+      * exists (update_array a d (eval_expression a e)).
+        exists (t_stmt s). constructor.
+      * assert (a d = 0 \/ a d <> 0).
+        {
+          destruct (a d).
+          { left. reflexivity. }
+          { right. discriminate. }
+        }
         destruct H.
-        { exists (t_stmt s). apply ten. apply H. }
-        { exists (t_stmt (concat s0 (s_cons (i_while d s0) s))). apply eleven. apply H. }
-      * exists a. exists (t_unord (t_stmt s0) (t_stmt s)). constructor.
-      * exists a. exists (t_ord (t_stmt s0) (t_stmt s)). constructor.
-      * exists a. exists (t_stmt (concat (get_function_body p f) s)). constructor.
+        { exists a. exists (t_stmt s). constructor. assumption. }
+        {
+          exists a.
+          exists (t_stmt (concat s0 (s_cons (i_while d s0) s))).
+          constructor. assumption.
+        }
+      * exists a. exists (t_unord (t_stmt s0) (t_stmt s)).
+        constructor.
+      * exists a. exists (t_ord (t_stmt s0) (t_stmt s)).
+        constructor.
+      * exists a. exists (t_stmt (concat (get_function_body p f) s)).
+        constructor.
   - left. reflexivity.
 Qed.
