@@ -26,27 +26,6 @@ Fixpoint concat (s1 : statement) (s2 : statement) : statement :=
   | s_cons i s1' => s_cons i (concat s1' s2) (* (i s1) . s2 = i (s1 . s2) *)
   end.
 
-(*
-Fixpoint well_formed_statement (s : statement) (n : nat) : Prop :=
-  match s with
-  | s_skip => True
-  | s_cons i s' => match i with
-                  | i_skip => well_formed_statement s' n
-                  | i_assign d e => well_formed_statement s' n
-                  | i_while d s'' => well_formed_statement s'' n /\ well_formed_statement s' n
-                  | i_async s'' => well_formed_statement s'' n /\ well_formed_statement s' n
-                  | i_finish s'' => well_formed_statement s'' n /\ well_formed_statement s' n
-                  | i_call fi => fi < n /\ well_formed_statement s' n
-                  end
-  end.
-
-Fixpoint well_formed_program (p : program) (n : nat) : Prop :=
-  match p with
-  | nil => True
-  | cons s tl => well_formed_statement s n /\ well_formed_program tl n
-  end.
-*)
-
 Fixpoint get_function_body (p : program) (n : nat) : statement :=
   match p with
   | nil => s_skip
@@ -75,17 +54,6 @@ Inductive tree : Type :=
   | t_unord (t1 : tree) (t2 : tree) (* T || T *)
   | t_stmt (s : statement)          (* <s> *)
   | t_finished.                     (* check mark *)
-
-(*
-Fixpoint well_formed_tree (t : tree) (n : nat) : Prop :=
-  match t with
-  | t_ord t1 t2 => well_formed_tree t1 n /\ well_formed_tree t2 n
-  | t_unord t1 t2 => well_formed_tree t1 n /\ well_formed_tree t2 n
-  | t_stmt s => well_formed_statement s n
-  | t_finished => True
-  end.
-*)
-(* tree_is_derived_from_program *)
 
 (* ==================== steps-to ==================== *)
 
@@ -124,11 +92,9 @@ Inductive steps_to : program -> array -> tree -> program -> array -> tree -> Pro
   | fourteen p a f k :
     steps_to p a (t_stmt (s_cons (i_call f) k)) p a (t_stmt (concat (get_function_body p f) k)).
 
+(* ==================== theorem ==================== *)
+
 Theorem progress : forall (p : program) (a : array) (t : tree),
-(*
-  well_formed_program p (length p) ->
-  well_formed_tree t (length p) ->
-*)
   t = t_finished \/ exists a' t', steps_to p a t p a' t'.
 Proof.
   intros p a t.
